@@ -13,7 +13,6 @@ def main():
     print(f'aM = {np.dot(a,M)}')
     print(f'MN = {np.dot(M,N)}')
 
-
 def lerArquivo(nome, tipo):
 
     if tipo.lower() == 'vetor':
