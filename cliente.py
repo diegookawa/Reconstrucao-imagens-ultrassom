@@ -26,7 +26,6 @@ def lerArquivo(nome, tipo):
         return
     
     a = np.zeros((linhas, 10))
-
     caminho = 'Tarefa02/' + nome
 
     with open(caminho, 'r') as arquivo:
