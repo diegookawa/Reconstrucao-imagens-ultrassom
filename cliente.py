@@ -3,24 +3,42 @@ import csv
 
 def main():
 
-    a = lerArquivo('a.csv')
-    print(a)
+    a = lerArquivo('a.csv', 'vetor')
+    M = lerArquivo('M.csv', 'matriz')
+    N = lerArquivo('N.csv', 'matriz')
 
-def lerArquivo(nome):
+    print(f'a = {a}')
+    print(f'M = {M}')
+    print(f'N = {N}')
+    print(f'aM = {np.dot(a,M)}')
+    print(f'MN = {np.dot(M,N)}')
 
-    a = []
+
+def lerArquivo(nome, tipo):
+
+    if tipo.lower() == 'vetor':
+        linhas = 1
+    
+    elif tipo.lower() == 'matriz':
+        linhas = 10
+
+    else:
+        print('Tipo nao definido')
+        return
+    
+    a = np.zeros((linhas, 10))
 
     caminho = 'Tarefa02/' + nome
 
     with open(caminho, 'r') as arquivo:
 
         dados = csv.reader(arquivo, delimiter=';')
+        cont = 0
 
         for linha in dados:
 
-            for coluna in linha:
-            
-                a = linha
+            a[cont] = linha
+            cont = cont + 1
 
     return a
 
