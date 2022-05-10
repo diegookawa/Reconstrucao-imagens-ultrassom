@@ -3,37 +3,30 @@ import csv
 
 def main():
 
-    a = lerArquivo('a.csv')
-    M = lerArquivo('M.csv')
-    N = lerArquivo('N.csv')
+    a = lerArquivo('a.csv', 'float')
+    M = lerArquivo('M.csv', 'int')
+    N = lerArquivo('N.csv', 'int')
 
     print(f'M = {M}')
     print(f'N = {N}')
     print(f'aM = {np.dot(a,M)}')
     print(f'MN = {np.dot(M,N)}')
 
-def lerArquivo(nome):
+def lerArquivo(nome, tipo):
 
-    caminho = 'Tarefa02/' + nome
+    a = []
 
-    with open(caminho, 'r') as arquivo:
+    with open(f'Tarefa02/{nome}') as arquivo:
 
-        dados = csv.reader(arquivo, delimiter=';')
-        linhas = 0
-
-        for linha in dados:
-            linhas = linhas + 1
-    
-    a = np.zeros((linhas, 10))
-    
-    with open(caminho, 'r') as arquivo:
-
-        dados = csv.reader(arquivo, delimiter=';')
-        linhas = 0
-
-        for linha in dados:
-            a[linhas] = linha
-            linhas = linhas + 1
+        data = csv.reader(arquivo, delimiter=';')
+        for row in data:
+            l = []
+            for column in row:
+                if tipo == 'int':
+                    l.append(int(column))
+                else:
+                    l.append(float(column))
+            a.append(l)
 
     return a
 
@@ -44,7 +37,6 @@ def cgne(H, g, f, r, p, a, B):
     p[0] = np.dot(np.transpose(H), r[0])
 
     for i in range(len(g)):
-
         a[i] = (np.dot(np.transpose(r[i]), r[i])) / (np.dot(np.transpose(p[i]), p[i]))
         f[i + 1] = f[i] + np.dot(a[i], p[i])
         r[i + 1] = r[i] - np.dot(np.dot(a[i], H), p[i])
