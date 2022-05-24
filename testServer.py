@@ -61,53 +61,55 @@ def listen_socket(s, H, g):
 
         c.send(f"G Signal: {g[0]}".encode())
 
-# def cgne(H, g):
+def cgne(H, g):
 
-#     f = np.zeros(len(g))
-#     r = g - np.dot(H, f)
-#     p = np.dot(np.transpose(H), r)
-#     rsold = np.dot(np.transpose(r), r)
-#     erro = 1e10-4
+     f = np.zeros((3600, 1))
+     print(len(f))
+     r = g - np.dot(H, f)
+     print(len(r))
+     p = np.dot(np.transpose(H), r)
+     rsold = np.dot(np.transpose(r), r)
+     erro = 1e10-4
 
-#     for i in range(1, len(g)):
+     for i in range(1, len(g)):
 
-#         ap = np.dot(H, p)
+         ap = np.dot(H, p)
 
-#         a = rsold / np.dot(np.transpose(p), p)
-#         f = f + np.dot(a, p)
-#         r = r - np.dot(a, ap)
-#         rsnew = np.dot(np.transpose(r), r)
+         a = rsold / np.dot(np.transpose(p), p)
+         f = f + a * p
+         r = r - a * ap
+         rsnew = np.dot(np.transpose(r), r)
 
-#         if np.sqrt(rsnew) < erro:
-#             break
+         if np.sqrt(rsnew) < erro:
+             break
 
-#         p = r + (rsnew / rsold) * p
-#         rsold = rsnew
+         p = r + (rsnew / rsold) * p
+         rsold = rsnew
 
-#     return f
+     return f
 
 # def cgne02(H, g):
 
-#     f = []
-#     r = []
-#     p = []
-#     erro = 1e10-4
+#      f = []
+#      r = []
+#      p = []
+#      erro = 1e10-4
 
-#     f.append(0)
-#     r.append(g - np.dot(H, f[0]))
-#     p.append(np.dot(np.transpose(H), r[0]))
+#      f.append(0)
+#      r.append(g - np.dot(H, f[0]))
+#      p.append(np.dot(np.transpose(H), r[0]))
 
-#     for i in range(len(g)):
+#      for i in range(len(g)):
 
-#         a = (np.dot(np.transpose(r[i]), r[i])) / (np.dot(np.transpose(p[i]), p[i]))
-#         f.append(f[i] + np.dot(a, p[i]))
-#         r.append(r[i] - np.dot(a, np.dot(H, p[i])))
-#         b = np.dot(np.transpose(r[i + 1]), r[i + 1]) / np.dot(np.transpose(r[i]), r[i])
-#         if np.sqrt(r[i + 1]) < erro:
-#             break
-#         p.append(np.dot(np.transpose(H), r[i + 1]) + np.dot(b, p[i]))
+#          a = (np.dot(np.transpose(r[i]), r[i])) / (np.dot(np.transpose(p[i]), p[i]))
+#          f.append(f[i] + np.dot(a, p[i]))
+#          r.append(r[i] - np.dot(a, np.dot(H, p[i])))
+#          b = np.dot(np.transpose(r[i + 1]), r[i + 1]) / np.dot(np.transpose(r[i]), r[i])
+#          if np.sqrt(r[i + 1]) < erro:
+#              break
+#          p.append(np.dot(np.transpose(H), r[i + 1]) + np.dot(b, p[i]))
 
-#     return f
+#      return f
 
 # def create_mesh(f):
 #     x = np.arange(0, 60, 1)
@@ -142,23 +144,27 @@ if __name__ == '__main__':
     # Load variables in cache
     H, g = load_csvs()
     # Initiate socket
-    s = initiate_socket()
+    #s = initiate_socket()
     # Listen to socket
-    listen_socket(s, H, g)
+    #listen_socket(s, H, g)
 
-    #f = cgne02(H, g)
+    f = cgne(H, g)
 
-    #print(f)
+    print(len(f))
 
-    #fig, ax = plt.subplots(figsize=(6, 6))
+    #fig, ax = plt.subplots(figsize=(60, 60))
     #X, Y, Z = create_mesh(f)
     #ax = plot_contour(ax, X, Y, Z)
     #ax.plot(xs[:,0], xs[:,1], linestyle='--', marker='o', color='orange')
     #ax.plot(xs[-1,0], xs[-1,1], 'ro')
     #plt.show()
 
-    #plt.imshow(imagem, cmap='gray')
+    f = np.reshape(f, (60, 60))
 
+    plt.plot(f)
+    #plt.imshow(f, cmap='gray', vmin=0, vmax=255)
+    plt.savefig('image.png')
+    
     #print(H)
 
 
