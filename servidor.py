@@ -26,11 +26,12 @@ def cgne(H, g, f, r, p, a, B):
         p[i + 1] = np.dot(np.transpose(H), r[i + 1]) + np.dot(B[i], p[i])
 
 if __name__ == '__main__':
-    a = read_csv('a.csv', 'float')
-    M = read_csv('M.csv', 'int')
-    N = read_csv('N.csv', 'int')
+    #a = read_csv('a.csv', 'float')
+    #M = read_csv('M.csv', 'int')
+    #N = read_csv('N.csv', 'int')
 
-    print(f'M = {M}')
-    print(f'N = {N}')
-    print(f'aM = {np.dot(a,M)}')
-    print(f'MN = {np.dot(M,N)}')
+    #print(f'M = {M}')
+    #print(f'N = {N}')
+    #print(f'aM = {np.dot(a,M)}')
+    #print(f'MN = {np.dot(M,N)}')
+

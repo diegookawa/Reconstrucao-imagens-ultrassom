@@ -1,6 +1,11 @@
 import csv
 import time
 import socket as st
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
+from itertools import product
+from warnings import warn
 
 def read_csv(filename, return_type):
     prefix = 'Tarefa02/'
@@ -56,6 +61,83 @@ def listen_socket(s, H, g):
 
         c.send(f"G Signal: {g[0]}".encode())
 
+# def cgne(H, g):
+
+#     f = np.zeros(len(g))
+#     r = g - np.dot(H, f)
+#     p = np.dot(np.transpose(H), r)
+#     rsold = np.dot(np.transpose(r), r)
+#     erro = 1e10-4
+
+#     for i in range(1, len(g)):
+
+#         ap = np.dot(H, p)
+
+#         a = rsold / np.dot(np.transpose(p), p)
+#         f = f + np.dot(a, p)
+#         r = r - np.dot(a, ap)
+#         rsnew = np.dot(np.transpose(r), r)
+
+#         if np.sqrt(rsnew) < erro:
+#             break
+
+#         p = r + (rsnew / rsold) * p
+#         rsold = rsnew
+
+#     return f
+
+# def cgne02(H, g):
+
+#     f = []
+#     r = []
+#     p = []
+#     erro = 1e10-4
+
+#     f.append(0)
+#     r.append(g - np.dot(H, f[0]))
+#     p.append(np.dot(np.transpose(H), r[0]))
+
+#     for i in range(len(g)):
+
+#         a = (np.dot(np.transpose(r[i]), r[i])) / (np.dot(np.transpose(p[i]), p[i]))
+#         f.append(f[i] + np.dot(a, p[i]))
+#         r.append(r[i] - np.dot(a, np.dot(H, p[i])))
+#         b = np.dot(np.transpose(r[i + 1]), r[i + 1]) / np.dot(np.transpose(r[i]), r[i])
+#         if np.sqrt(r[i + 1]) < erro:
+#             break
+#         p.append(np.dot(np.transpose(H), r[i + 1]) + np.dot(b, p[i]))
+
+#     return f
+
+# def create_mesh(f):
+#     x = np.arange(0, 60, 1)
+#     y = np.arange(0, 60, 1)
+#     X, Y = np.meshgrid(x, y)
+#     Z = np.zeros(X.shape)
+#     mesh_size = range(len(X))
+#     for i, j in product(mesh_size, mesh_size):
+#         x_coor = X[i][j]
+#         y_coor = Y[i][j]
+#         Z[i][j] = f(np.array([x_coor, y_coor]))
+#     return X, Y, Z
+
+# def plot_contour(ax, X, Y, Z):
+#     ax.set(
+#         title='Path During Optimization Process',
+#         xlabel='x1',
+#         ylabel='x2'
+#     )
+#     CS = ax.contour(X, Y, Z)
+#     ax.clabel(CS, fontsize='smaller', fmt='%1.2f')
+#     ax.axis('square')
+#     return ax
+
+# def f(x):
+#     Ax = np.dot(H, x)
+#     xAx = np.dot(x, Ax)
+#     gx = np.dot(g, x)
+#     return 0.5 * xAx - gx
+
 if __name__ == '__main__': 
     # Load variables in cache
     H, g = load_csvs()
@@ -63,6 +145,21 @@ if __name__ == '__main__':
     s = initiate_socket()
     # Listen to socket
     listen_socket(s, H, g)
+
+    #f = cgne02(H, g)
+
+    #print(f)
+
+    #fig, ax = plt.subplots(figsize=(6, 6))
+    #X, Y, Z = create_mesh(f)
+    #ax = plot_contour(ax, X, Y, Z)
+    #ax.plot(xs[:,0], xs[:,1], linestyle='--', marker='o', color='orange')
+    #ax.plot(xs[-1,0], xs[-1,1], 'ro')
+    #plt.show()
+
+    #plt.imshow(imagem, cmap='gray')
+
+    #print(H)
 
 
 
