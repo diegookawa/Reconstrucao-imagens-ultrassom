@@ -1,34 +1,16 @@
 import numpy as np 
 import csv
 
-def main():
-
-    a = lerArquivo('a.csv', 'float')
-    M = lerArquivo('M.csv', 'int')
-    N = lerArquivo('N.csv', 'int')
-
-    print(f'M = {M}')
-    print(f'N = {N}')
-    print(f'aM = {np.dot(a,M)}')
-    print(f'MN = {np.dot(M,N)}')
-
-def lerArquivo(nome, tipo):
-
-    a = []
-
-    with open(f'Tarefa02/{nome}') as arquivo:
-
-        data = csv.reader(arquivo, delimiter=';')
-        for row in data:
-            l = []
-            for column in row:
-                if tipo == 'int':
-                    l.append(int(column))
-                else:
-                    l.append(float(column))
-            a.append(l)
-
-    return a
+def read_csv(filename):
+    with open(filename, "rb") as csvfile:
+        datareader = csv.reader(csvfile)
+        yield next(datareader)  # yield the header row
+        count = 0
+        for row in datareader:
+            yield row
+            count += 1
+            if count:
+                return
 
 def cgne(H, g, f, r, p, a, B):
 
@@ -44,5 +26,11 @@ def cgne(H, g, f, r, p, a, B):
         p[i + 1] = np.dot(np.transpose(H), r[i + 1]) + np.dot(B[i], p[i])
 
 if __name__ == '__main__':
-    main()
+    a = read_csv('a.csv', 'float')
+    M = read_csv('M.csv', 'int')
+    N = read_csv('N.csv', 'int')
 
+    print(f'M = {M}')
+    print(f'N = {N}')
+    print(f'aM = {np.dot(a,M)}')
+    print(f'MN = {np.dot(M,N)}')
