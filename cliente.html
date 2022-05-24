@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Reconstrução de imagens ultrassom</title>
+    <link rel="stylesheet" href="cliente.css">
+  </head>
+  <body>
+      <div class="main-block">
+        <form action="/">
+          <h1>Reconstrução de imagens de ultrassom</h1>
+          <div class="info">
+            <input class="fname" type="text" name="name" placeholder="Nome completo">
+            <label for="algoritmos">Escolha um algorítmo para a reconstrução da imagem (CGNE ou CGNR)</label>
+            <select name="algoritmos" id="algoritmos">
+                <option value="cgne">CGNE</option>
+                <option value="cgnr">CGNR</option>
+            </select>
+            <br><br>
+          <label for="arquivo">Selecione um vetor de sinal (.csv):</label>
+          <br><br>
+          <input type="file" id="arquivo" name="arquivo">
+          </div>
+          <button type="submit" href="/">Iniciar reconstrução</button>
+        </form>
+      </div>
+    </body>
+</html>
