@@ -4,30 +4,21 @@ import socket as st
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
-from itertools import product
-from warnings import warn
 
 def read_csv(filename, return_type):
     prefix = 'Tarefa02/'
     with open(prefix + filename, "r") as csvfile:
         datareader = csv.reader(csvfile)
         for row in datareader:
-            is_v = len(row) > 0
-            break
-        if is_v:
-            for row in datareader:
-                yield [return_type(i) for i in row]
-        else:
-            for row in datareader:
-                yield return_type(i)
+            yield [return_type(i) for i in row]
 
 def load_csvs():
     print("Loading files")
     start_time = time.time()
     H = list(read_csv('H-1.csv', float))
-    print("H matrix loaded")
+    print(f"H matrix loaded")
     g = list(read_csv('G-1.csv', float))
-    print("G signal loaded")
+    print(f"{len(g)} lines of G signal loaded")
     end_time = time.time()
     print("Finished loading")
     print(f"Load time: {end_time - start_time}")
@@ -63,30 +54,26 @@ def listen_socket(s, H, g):
 
 def cgne(H, g):
 
-     f = np.zeros((3600, 1))
-     print(len(f))
-     r = g - np.dot(H, f)
-     print(len(r))
-     p = np.dot(np.transpose(H), r)
-     rsold = np.dot(np.transpose(r), r)
-     erro = 1e10-4
+    f = np.zeros((3600, 1))
+    r = g - np.dot(H, f)
+    p = np.dot(np.transpose(H), r)
+    erro = 1e-4
 
-     for i in range(1, len(g)):
+    for i in range(1, len(g)):
+        ap = np.dot(H, p)
+        rsold = np.dot(np.transpose(r), r)
 
-         ap = np.dot(H, p)
+        a = rsold / np.dot(np.transpose(p), p)
+        f = f + np.dot(a, p)
+        r = r - np.dot(a, ap)
+        beta = np.dot(np.transpose(r), r) / rsold
 
-         a = rsold / np.dot(np.transpose(p), p)
-         f = f + a * p
-         r = r - a * ap
-         rsnew = np.dot(np.transpose(r), r)
+        if beta < erro:
+            break
 
-         if np.sqrt(rsnew) < erro:
-             break
+        p = np.dot(np.transpose(H), r) + beta * p
 
-         p = r + (rsnew / rsold) * p
-         rsold = rsnew
-
-     return f
+    return f
 
 # def cgne02(H, g):
 
@@ -150,19 +137,19 @@ if __name__ == '__main__':
 
     f = cgne(H, g)
 
-    print(len(f))
-
     #fig, ax = plt.subplots(figsize=(60, 60))
     #X, Y, Z = create_mesh(f)
     #ax = plot_contour(ax, X, Y, Z)
     #ax.plot(xs[:,0], xs[:,1], linestyle='--', marker='o', color='orange')
     #ax.plot(xs[-1,0], xs[-1,1], 'ro')
     #plt.show()
+    
 
     f = np.reshape(f, (60, 60))
 
-    plt.plot(f)
-    #plt.imshow(f, cmap='gray', vmin=0, vmax=255)
+    f = np.transpose(f)
+
+    plt.imshow(f, cmap='gray')
     plt.savefig('image.png')
     
     #print(H)
