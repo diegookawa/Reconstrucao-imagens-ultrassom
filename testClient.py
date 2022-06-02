@@ -1,14 +1,23 @@
 import socket
 
-HOST = "127.0.0.1"  # The server's hostname or IP address
-PORT = 12345  # The port used by the server
+HEADER = 64
+PORT = 5050
+FORMAT = 'utf-8'
+DISCONNECT_MESSAGE = "!DISCONNECT"
+SERVER = "127.0.1.1"
+ADDR = (SERVER, PORT)
 
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    s.connect((HOST, PORT))
-    s.sendall(b"Hello, world")
-    while True:
-        data = s.recv(1024)
-        print(f"Received {data!r}")
-        if not data:
-            break
+client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client.connect(ADDR)
 
+def send(msg):
+    message = msg.encode(FORMAT)
+    msg_length = len(message)
+    send_length = str(msg_length).encode(FORMAT)
+    send_length += b' ' * (HEADER - len(send_length))
+    client.send(send_length)
+    client.send(message)
+    print(client.recv(2048).decode(FORMAT))
+
+
+send(DISCONNECT_MESSAGE)
