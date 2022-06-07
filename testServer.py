@@ -1,23 +1,27 @@
 import csv
+from fileinput import filename
+from hashlib import algorithms_available
 import os
 import socket as st
 import threading
 import numpy as np
 import pandas as pd
-import feather
+import pickle
+#import feather
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from time import time
 
 HEADER = 64
-PORT = 5050
+PORT = 5052
 SERVER = '127.0.0.1'
 ADDR = (SERVER, PORT)
 FORMAT = 'utf-8'
 DISCONNECT_MESSAGE = "!DISCONNECT"
+HEADERSIZE = 10
 
-server = st.socket(st.AF_INET, st.SOCK_STREAM)
-server.bind(ADDR)
+#server = st.socket(st.AF_INET, st.SOCK_STREAM)
+#server.bind(ADDR)
 
 def load_feather(path):
     # Loads feather file based on path
@@ -148,7 +152,83 @@ def process_image(name, signal):
     plt.savefig(f'{name_dir}/{signal_name}.png')
 
 
+
+
+#New functions
+
+def process_image02(name, g):
+    # Load image based on request
+    if len(g) > 50000:
+        H = load_feather('Models/H-1.feather')
+    else:
+        H = load_feather('Models/H-2.feather')
+
+    # Process 
+    start_time = time()
+    f = cgne_np(H, g)
+    end_time = time()
+    print(f'[   Time to process data: {end_time - start_time}    ]')
+    # f = cgnr(H, g)
+    f = np.reshape(f, (60, 60), order='F')
+
+    #signal_name = os.path.splitext(g)
+    name_dir = f'Images/{name}'
+    mkdir_p(name_dir)
+    plt.imshow(f, cmap='gray')
+    plt.savefig(f'{name_dir}/Image.png')
+
+def convert_csv_to_feather(path):
+
+    df_file = pd.read_csv(path + '.csv')
+
+    df_file.to_feather(path + '.feather', compression='uncompressed')
+
+def start_server02():
+    
+    s = st.socket(st.AF_INET, st.SOCK_STREAM)
+    s.bind(ADDR)
+    s.listen(5)
+
+    print('Server Started.')
+
+    while True:
+
+        conn, addr = s.accept()
+        print(f'Client connected ip: <{addr}>')
+
+        full_msg = b''
+        new_msg = True
+
+        while True:
+
+            msg = conn.recv(1024)
+
+            if new_msg:
+
+                print(f'New msg lenght: {msg[:HEADERSIZE]}')
+                msglen = int(msg[:HEADERSIZE])
+                new_msg = False
+
+            full_msg += msg
+
+            if len(full_msg) - HEADERSIZE == msglen:
+
+                print('Full msg received')
+
+                info = pickle.loads(full_msg[HEADERSIZE:])
+                username = info[1]
+                print(username)
+                algorithm = info[2]
+                g = info[3]
+                new_msg = True
+                full_msg = b''
+
+                process_image02(username, g)
+                s.close()
+
 if __name__ == '__main__':
     print("[STARTING] server is starting...")
-    # start_server()
-    process_image('João', 'G-2.feather')
+    #start_server()
+    start_server02()
+    #convert_csv_to_feather()
+    process_image('João', 'G-1.feather')
