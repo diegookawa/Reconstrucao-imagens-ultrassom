@@ -1,0 +1,205 @@
+import os
+import socket as st
+import threading
+import numpy as np
+import pandas as pd
+import pickle
+import feather
+import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
+from enum import Enum
+from queue import Queue
+from time import time
+from datetime import datetime
+
+PORT = 5052
+SERVER = '127.0.0.1'
+ADDR = (SERVER, PORT)
+FORMAT = 'utf-8'
+DISCONNECT_MESSAGE = "!DISCONNECT"
+HEADERSIZE = 10
+PROCESSING_QUEUE = Queue()
+
+server = st.socket(st.AF_INET, st.SOCK_STREAM)
+server.bind(ADDR)
+
+class Algorithm(Enum):
+    CGNE = 1
+    CGNR = 2
+
+
+def load_feather(path):
+    # Loads feather file based on path
+    filename = os.path.splitext(os.path.split(path)[1])[0]
+    start_time = time()
+    print(f'[LOADING] File {filename}]')
+    file = pd.read_feather(path).to_numpy(dtype=float)
+    end_time = time()
+    print(f'[LOADING FINISHED]')
+    print(f'[TIME SPENT] {end_time - start_time}.')
+    return file
+
+def handle_client(conn, addr):
+    print(f"[NEW CONNECTION] {addr} connected.")
+
+    full_msg = b''
+    new_msg = True
+
+    connected = True
+    while connected:
+        msg = conn.recv(1024)
+        # print(f'[MESSAGE] {msg}')
+
+        if new_msg:
+            print(f'New msg lenght: {msg[:HEADERSIZE]}')
+            msglen = int(msg[:HEADERSIZE])
+            new_msg = False
+
+        full_msg += msg
+
+        if len(full_msg) - HEADERSIZE == msglen:
+            print('Full msg received')
+
+            info = pickle.loads(full_msg[HEADERSIZE:])
+            new_msg = True
+            full_msg = b''
+
+            PROCESSING_QUEUE.put(info)
+        elif msg == DISCONNECT_MESSAGE:
+            break
+    conn.close()
+
+def dot_transpose(v):
+    return np.transpose(v).dot(v)
+
+def cgne(H, g):
+    f_i = np.zeros((3600, 1))
+    r_i = g - np.dot(H, f_i)
+    p_i = np.dot(np.transpose(H), r_i)
+    erro = 1e-4
+
+    for i in range(0, len(g)):
+        # i variables        
+        r_d = r_i
+        a_i = dot_transpose(r_d) / dot_transpose(p_i)
+
+        f_i = f_i + a_i * p_i
+        h_p = np.dot(H, p_i) 
+        r_i = r_i - a_i * h_p
+        beta = dot_transpose(r_i) / dot_transpose(r_d)
+
+        erro_i = abs(np.linalg.norm(r_i, ord=2) - np.linalg.norm(r_d, ord=2))
+        
+        if erro_i < erro:
+            print(f'[   Processed {i + 1} times ]')
+            break
+
+        p_i = np.dot(np.transpose(H), r_i) + beta * p_i
+    return f_i
+
+def cgnr(H, g):
+    f_i = np.zeros((3600, 1))
+    r_i = g - np.dot(H, f_i)
+    z_i = np.dot(np.transpose(H), r_i)
+    p_i = z_i
+    erro = 1e-4
+
+    for i in range(0, len(g)):
+        w_i = np.dot(H, p_i)
+        r_d = r_i
+        # i variables
+        z_norm = np.linalg.norm(z_i, ord=2) ** 2
+        a_i =  z_norm / np.linalg.norm(w_i, ord=2) ** 2
+
+        f_i = f_i + a_i * p_i
+        r_i = r_i - a_i * w_i
+        z_i = np.dot(np.transpose(H), r_i)
+        beta = np.linalg.norm(z_i, ord=2) ** 2/ z_norm
+
+        erro_i = abs(np.linalg.norm(r_i, ord=2) - np.linalg.norm(r_d, ord=2))
+
+        if erro_i < erro:
+            print(f'[   Processed {i + 1} times ]')
+            break
+
+        p_i = z_i + beta * p_i
+    return f_i
+
+def mkdir_p(mypath):
+    '''Creates a directory. equivalent to using mkdir -p on the command line'''
+
+    from errno import EEXIST
+    from os import makedirs,path
+
+    try:
+        makedirs(mypath)
+    except OSError as exc: # Python >2.5
+        if exc.errno == EEXIST and path.isdir(mypath):
+            pass
+        else: raise
+
+def process_image(info):
+    process_start = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')
+    # Load image based on request
+    image_size = 0
+    if len(info[3]) > 50000:
+        image_size = 60
+        H = load_feather('Models/H-1.feather')
+    else:
+        image_size = 30
+        H = load_feather('Models/H-2.feather')
+
+    alg = Algorithm(int(info[2])).name 
+
+    # Process 
+    start_time = time()
+    if alg == 'CGNE':
+        f = cgne(H, info[3])
+    elif alg == 'CGNR':
+        f = cgnr(H, info[3])
+    else:
+        print('Error')
+    end_time = time()
+    print(f'[TIME SPENT] {end_time - start_time}')
+
+    f = np.reshape(f, (image_size, image_size), order='F')
+
+    process_end = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')
+
+    name_dir = f'Images/{info[1]}'
+    mkdir_p(name_dir)
+
+    metadata = {
+        'Title':f'{info[1]}',
+        'Author':'Lucas Venâncio e Diego Okawa',
+        'Description': f'Algorithm used: {alg} | Image size: {image_size}px | Start date: {process_start} | End date: {process_end} | Time spent: {round(end_time - start_time, 2)}s',
+    }
+    plt.imshow(f, cmap='gray')
+    plt.savefig(f'{name_dir}/{info[1]}-{process_end}.png', metadata=metadata)
+
+def start_server():
+    server.listen(5)
+
+    print(f"[LISTENING] Server is listening on {SERVER}")
+
+    while True:
+        conn, addr = server.accept()
+
+        response_thread = threading.Thread(target=handle_client, args=(conn, addr))
+        response_thread.start()
+        # print(f"[ACTIVE CONNECTIONS] {threading.activeCount() - 1}")
+
+def process_queue():
+    while True:
+        if PROCESSING_QUEUE.qsize() > 0:
+            process_image(PROCESSING_QUEUE.get())
+
+if __name__ == '__main__':
+    print("[STARTING] server is starting...")
+    server_thread = threading.Thread(target=start_server)
+    server_thread.start()
+    print('[LISTENING] processing queue')
+    queue_thread = threading.Thread(target=process_queue)
+    queue_thread.start()
+
+
