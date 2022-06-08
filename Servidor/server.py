@@ -6,11 +6,13 @@ import pandas as pd
 import pickle
 import feather
 import matplotlib.pyplot as plt
+
 from matplotlib.ticker import MaxNLocator
 from enum import Enum
 from queue import Queue
 from time import time
 from datetime import datetime
+from PIL import Image
 
 PORT = 5052
 SERVER = '127.0.0.1'
@@ -18,6 +20,7 @@ ADDR = (SERVER, PORT)
 FORMAT = 'utf-8'
 DISCONNECT_MESSAGE = "!DISCONNECT"
 HEADERSIZE = 10
+BASE_PATH = 'Servidor'
 PROCESSING_QUEUE = Queue()
 
 server = st.socket(st.AF_INET, st.SOCK_STREAM)
@@ -27,20 +30,18 @@ class Algorithm(Enum):
     CGNE = 1
     CGNR = 2
 
-
 def load_feather(path):
     # Loads feather file based on path
     filename = os.path.splitext(os.path.split(path)[1])[0]
     start_time = time()
-    print(f'[LOADING] File {filename}]')
+    print(f'    [LOADING] File {filename}')
     file = pd.read_feather(path).to_numpy(dtype=float)
     end_time = time()
-    print(f'[LOADING FINISHED]')
-    print(f'[TIME SPENT] {end_time - start_time}.')
+    print(f'    [LOADING] Finished, time spent: {end_time - start_time}.')
     return file
 
 def handle_client(conn, addr):
-    print(f"[NEW CONNECTION] {addr} connected.")
+    print(f"[CONNECTION] IP: {addr[0]}, Port: {addr[1]} connected.")
 
     full_msg = b''
     new_msg = True
@@ -48,26 +49,30 @@ def handle_client(conn, addr):
     connected = True
     while connected:
         msg = conn.recv(1024)
-        # print(f'[MESSAGE] {msg}')
+        if msg != b'':
+            if new_msg:
+                msglen = int(msg[:HEADERSIZE])
+                new_msg = False
 
-        if new_msg:
-            print(f'New msg lenght: {msg[:HEADERSIZE]}')
-            msglen = int(msg[:HEADERSIZE])
-            new_msg = False
+            full_msg += msg
 
-        full_msg += msg
-
-        if len(full_msg) - HEADERSIZE == msglen:
-            print('Full msg received')
-
-            info = pickle.loads(full_msg[HEADERSIZE:])
-            new_msg = True
-            full_msg = b''
-
-            PROCESSING_QUEUE.put(info)
-        elif msg == DISCONNECT_MESSAGE:
-            break
+            if len(full_msg) - HEADERSIZE == msglen:
+                info = pickle.loads(full_msg[HEADERSIZE:])
+                new_msg = True
+                full_msg = b''
+                if len(info) == 3:
+                    print(f'    [PROCESSING] File added into the queue.')
+                    PROCESSING_QUEUE.put(info)
+                else:
+                    images = []
+                    for image in os.listdir(BASE_PATH + f'/Images/{info[1]}'):
+                        img = open(image, 'r')
+                        images.append(img)
+                    p = pickle.dumps(images)
+                    print(p)
+                connected = False
     conn.close()
+    print(f"[CONNECTION] IP: {addr[0]}, Port: {addr[1]} disconnected.")
 
 def dot_transpose(v):
     return np.transpose(v).dot(v)
@@ -91,7 +96,7 @@ def cgne(H, g):
         erro_i = abs(np.linalg.norm(r_i, ord=2) - np.linalg.norm(r_d, ord=2))
         
         if erro_i < erro:
-            print(f'[   Processed {i + 1} times ]')
+            print(f'    [PROCESSING] Image processed {i + 1} times.')
             break
 
         p_i = np.dot(np.transpose(H), r_i) + beta * p_i
@@ -119,7 +124,7 @@ def cgnr(H, g):
         erro_i = abs(np.linalg.norm(r_i, ord=2) - np.linalg.norm(r_d, ord=2))
 
         if erro_i < erro:
-            print(f'[   Processed {i + 1} times ]')
+            print(f'    [PROCESSING] Image processed {i + 1} times.')
             break
 
         p_i = z_i + beta * p_i
@@ -140,14 +145,15 @@ def mkdir_p(mypath):
 
 def process_image(info):
     process_start = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')
-    # Load image based on request
     image_size = 0
     if len(info[3]) > 50000:
         image_size = 60
-        H = load_feather('Models/H-1.feather')
+        model_path = BASE_PATH + '/Models/H-1.feather'
     else:
         image_size = 30
-        H = load_feather('Models/H-2.feather')
+        model_path = BASE_PATH + '/Models/H-2.feather'
+
+    H = load_feather(model_path)
 
     alg = Algorithm(int(info[2])).name 
 
@@ -160,13 +166,13 @@ def process_image(info):
     else:
         print('Error')
     end_time = time()
-    print(f'[TIME SPENT] {end_time - start_time}')
+    print(f'    [PROCESSING] Time spent: {end_time - start_time}')
 
     f = np.reshape(f, (image_size, image_size), order='F')
 
     process_end = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')
 
-    name_dir = f'Images/{info[1]}'
+    name_dir = f'{BASE_PATH}/Images/{info[1]}'
     mkdir_p(name_dir)
 
     metadata = {
@@ -176,6 +182,7 @@ def process_image(info):
     }
     plt.imshow(f, cmap='gray')
     plt.savefig(f'{name_dir}/{info[1]}-{process_end}.png', metadata=metadata)
+    print(f'    [PROCESSING] Image saved')
 
 def start_server():
     server.listen(5)
@@ -185,21 +192,20 @@ def start_server():
     while True:
         conn, addr = server.accept()
 
-        response_thread = threading.Thread(target=handle_client, args=(conn, addr))
+        response_thread = threading.Thread(target=handle_client, name=f'Connection thread',args=(conn, addr))
         response_thread.start()
-        # print(f"[ACTIVE CONNECTIONS] {threading.activeCount() - 1}")
 
 def process_queue():
     while True:
         if PROCESSING_QUEUE.qsize() > 0:
+            print(f'    [PROCESSING] Signal found in queue')
             process_image(PROCESSING_QUEUE.get())
 
 if __name__ == '__main__':
-    print("[STARTING] server is starting...")
-    server_thread = threading.Thread(target=start_server)
-    server_thread.start()
-    print('[LISTENING] processing queue')
-    queue_thread = threading.Thread(target=process_queue)
+    print('[PROCESSING] Processing queue initiated.')
+    queue_thread = threading.Thread(target=process_queue, name='Processing Thread')
+    queue_thread.daemon = True
     queue_thread.start()
 
-
+    print("[STARTING] Server is starting...")
+    start_server()

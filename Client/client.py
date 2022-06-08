@@ -10,6 +10,7 @@ PORT = 5052
 ADDR = (SERVER, PORT)
 FORMAT = "utf-8"
 HEADERSIZE = 10
+DISCONNECT_MESSAGE = "!DISCONNECT"
 
 def convert_feather(path):
     start_time = time()
@@ -21,7 +22,7 @@ def convert_feather(path):
     return end_time - start_time
 
 def printMainMenu():
-    option = int (input('Informe uma opção:\n1 - Reconstruir Imagem\n2 - Sair\n'))
+    option = int (input('Informe uma opção:\n1 - Reconstruir Imagem\n2 - Receber imagens\n3 - Sair\n'))
     return option
 
 def clearConsole():
@@ -42,15 +43,14 @@ def load_feather(path):
     return file
 
 if __name__ == '__main__':
+    name = input('Informe seu nome: ')
     while True:
-
         option = printMainMenu()
 
         if option == 1:
             client = st.socket(st.AF_INET, st.SOCK_STREAM)
             client.connect(ADDR)
 
-            name = input('Informe seu nome: ')
             algorithm = input('Informe o algoritmo: CGNE (1) ou CGNR (2): ')
             filename = input('Informe o nome do arquivo de sinal: ')
 
@@ -60,16 +60,27 @@ if __name__ == '__main__':
 
             info = {1: name, 2: algorithm, 3: g}
             msg = pickle.dumps(info)
-            print(len(msg))
 
             msg = bytes(f'{len(msg):<{HEADERSIZE}}', FORMAT) + msg
 
             client.send(msg)
 
             client.close()
-            break
 
         elif option == 2:
+            client = st.socket(st.AF_INET, st.SOCK_STREAM)
+            client.connect(ADDR)
+
+            tp = input('Informe se irá ser recebido uma(1) ou todas as imagens (2)')
+
+            info = {1: name, 2: tp}
+            msg = pickle.dumps(info)
+            msg = bytes(f'{len(msg):<{HEADERSIZE}}', FORMAT) + msg
+
+            client.send(msg)
+
+            client.close()
+        elif option == 3:
             break
 
         else:
