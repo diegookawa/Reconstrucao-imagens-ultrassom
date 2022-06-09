@@ -4,6 +4,7 @@ import threading
 import numpy as np
 import pandas as pd
 import pickle
+import base64
 import feather
 import matplotlib.pyplot as plt
 
@@ -14,7 +15,7 @@ from time import time
 from datetime import datetime
 from PIL import Image
 
-PORT = 5052
+PORT = 5051
 SERVER = '127.0.0.1'
 ADDR = (SERVER, PORT)
 FORMAT = 'utf-8'
@@ -65,11 +66,37 @@ def handle_client(conn, addr):
                     PROCESSING_QUEUE.put(info)
                 else:
                     images = []
-                    for image in os.listdir(BASE_PATH + f'/Images/{info[1]}'):
-                        img = open(image, 'r')
-                        images.append(img)
-                    p = pickle.dumps(images)
-                    print(p)
+                    if(isinstance(info[2], int)):
+                        itr = 1
+                        #Deve ter um jeito melhor de fazer isso, tipo pegar o indice da imagem direto em vez de percorrer todas as imagens
+                        for image in os.listdir(BASE_PATH + f'/Images/{info[1]}'):
+                            if(itr == info[2]):
+                                with open(BASE_PATH + f'/Images/{info[1]}/{image}', "rb") as file:
+                                    img = base64.b64encode(file.read())
+                                p = pickle.dumps(img)
+                                p = bytes(f'{len(p):<{HEADERSIZE}}', FORMAT) + p
+                                conn.send(p)
+                                break
+                            itr = itr + 1
+                    else:
+                        if info[2] == '1':
+                            for image in os.listdir(BASE_PATH + f'/Images/{info[1]}'):
+                                images.append(image)
+                            p = pickle.dumps(images)
+                            p = bytes(f'{len(p):<{HEADERSIZE}}', FORMAT) + p
+                            conn.send(p)
+
+                        elif info[2] == '2':
+                            for image in os.listdir(BASE_PATH + f'/Images/{info[1]}'):
+                                with open(BASE_PATH + f'/Images/{info[1]}/{image}', "rb") as file:
+                                    img = base64.b64encode(file.read())
+                                images.append(img)
+                            p = pickle.dumps(images)
+                            p = bytes(f'{len(p):<{HEADERSIZE}}', FORMAT) + p
+                            conn.send(p)
+                        else:
+                            print('Invalid option')
+
                 connected = False
     conn.close()
     print(f"[CONNECTION] IP: {addr[0]}, Port: {addr[1]} disconnected.")

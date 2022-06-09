@@ -1,12 +1,14 @@
 import socket as st
 import pandas as pd
+import matplotlib.pyplot as plt
 import pickle
+import base64
 import os
 import feather
 from time import time
 
 SERVER = '127.0.0.1'
-PORT = 5052
+PORT = 5051
 ADDR = (SERVER, PORT)
 FORMAT = "utf-8"
 HEADERSIZE = 10
@@ -17,12 +19,12 @@ def convert_feather(path):
     df = pd.read_csv(f'{path}.csv', header=None)
     df.columns = df.columns.astype(str)
     df.to_feather(f'{path}.feather')
-    print(f'Size of feather: {len(df)}')
+    print(f'\nSize of feather: {len(df)}')
     end_time = time()
     return end_time - start_time
 
 def printMainMenu():
-    option = int (input('Informe uma opção:\n1 - Reconstruir Imagem\n2 - Receber imagens\n3 - Sair\n'))
+    option = int (input('\nInforme uma opção:\n1 - Reconstruir Imagem\n2 - Receber imagens\n3 - Sair\n-> '))
     return option
 
 def clearConsole():
@@ -43,7 +45,7 @@ def load_feather(path):
     return file
 
 if __name__ == '__main__':
-    name = input('Informe seu nome: ')
+    name = input('Informe seu nome\n-> ')
     while True:
         option = printMainMenu()
 
@@ -51,19 +53,18 @@ if __name__ == '__main__':
             client = st.socket(st.AF_INET, st.SOCK_STREAM)
             client.connect(ADDR)
 
-            algorithm = input('Informe o algoritmo: CGNE (1) ou CGNR (2): ')
-            filename = input('Informe o nome do arquivo de sinal: ')
+            algorithm = input('\nInforme o algoritmo: CGNE (1) ou CGNR (2)\n-> ')
+            filename = input('\nInforme o nome do arquivo de sinal\n-> ')
 
             convert_feather(f'{filename}')
-
             g = load_feather(f'{filename}.feather')
 
             info = {1: name, 2: algorithm, 3: g}
             msg = pickle.dumps(info)
-
             msg = bytes(f'{len(msg):<{HEADERSIZE}}', FORMAT) + msg
 
             client.send(msg)
+            input('\nSinal enviado. Clique ENTER para continuar...')
 
             client.close()
 
@@ -71,7 +72,7 @@ if __name__ == '__main__':
             client = st.socket(st.AF_INET, st.SOCK_STREAM)
             client.connect(ADDR)
 
-            tp = input('Informe se irá ser recebido uma(1) ou todas as imagens (2)')
+            tp = input('\nInforme se irá ser recebido uma(1) ou todas as imagens (2)\n-> ')
 
             info = {1: name, 2: tp}
             msg = pickle.dumps(info)
@@ -79,7 +80,63 @@ if __name__ == '__main__':
 
             client.send(msg)
 
+            data = b''
+            while True:
+                msg = client.recv(1024)
+                if not msg: break
+                data += msg
+
+            info = pickle.loads(data[HEADERSIZE:])
+            
             client.close()
+            if tp == '1':                
+                client = st.socket(st.AF_INET, st.SOCK_STREAM)
+                client.connect(ADDR)
+
+                itr = 1
+                for image in info:
+                    print(f'{itr} - {image}')
+                    itr = itr + 1
+
+                image_option = int(input('\nEscolha uma imagem\n-> '))
+
+                info = {1: name, 2: image_option}
+                msg = pickle.dumps(info)
+                msg = bytes(f'{len(msg):<{HEADERSIZE}}', FORMAT) + msg
+
+                client.send(msg)
+
+                data = b''
+                while True:
+                    msg = client.recv(1024)
+                    if not msg: break
+                    data += msg
+
+                info = pickle.loads(data[HEADERSIZE:])
+
+                img = open(f'{image_option}.png', 'wb')
+                img.write(base64.b64decode((info)))
+                img.close()
+
+                input('Imagem salva com sucesso. Clique ENTER para continuar...')
+
+                client.close()
+            
+            elif tp == '2':
+                itr = 1
+                for image in info:
+                    img = open(f'{itr}.png', 'wb')
+                    img.write(base64.b64decode((image)))
+                    img.close()
+                    itr = itr + 1
+                    
+                input('Imagens salvas com sucesso. Clique ENTER para continuar...')
+
+            else:
+                print('ERROR')
+
+            client.close()
+
         elif option == 3:
             break
 
