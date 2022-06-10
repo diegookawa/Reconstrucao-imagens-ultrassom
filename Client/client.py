@@ -1,18 +1,33 @@
 import socket as st
 import pandas as pd
-import matplotlib.pyplot as plt
 import pickle
 import base64
 import os
 import feather
+
 from time import time
+from math import sqrt
 
 SERVER = '127.0.0.1'
-PORT = 5051
+PORT = 5052
 ADDR = (SERVER, PORT)
 FORMAT = "utf-8"
 HEADERSIZE = 10
 DISCONNECT_MESSAGE = "!DISCONNECT"
+
+def calculate_signal(filename):
+    convert_feather(f'{filename}')
+    g = load_feather(f'{filename}.feather')
+    n = 64
+
+    s = 794 if len(g) > 50000 else 436
+
+    for c in range(n):
+        for l in range(s):
+            y = 100 + (1/20) * l * sqrt(l)
+            g[l + c * s] = g[l + c * s] * y
+
+    return g
 
 def convert_feather(path):
     start_time = time()
@@ -56,8 +71,7 @@ if __name__ == '__main__':
             algorithm = input('\nInforme o algoritmo: CGNE (1) ou CGNR (2)\n-> ')
             filename = input('\nInforme o nome do arquivo de sinal\n-> ')
 
-            convert_feather(f'{filename}')
-            g = load_feather(f'{filename}.feather')
+            g = calculate_signal(filename)
 
             info = {1: name, 2: algorithm, 3: g}
             msg = pickle.dumps(info)
