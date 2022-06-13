@@ -15,6 +15,8 @@ FORMAT = "utf-8"
 HEADERSIZE = 10
 DISCONNECT_MESSAGE = "!DISCONNECT"
 
+alg = ['', 'cgne', 'cgnr']
+
 def calculate_signal(filename):
     convert_feather(f'{filename}')
     g = load_feather(f'{filename}.feather')
@@ -59,8 +61,41 @@ def load_feather(path):
 
     return file
 
+def receive_message(client):
+    data = b''
+    while True:
+        msg = client.recv(1024)
+        if not msg: break
+        data += msg
+    return data
+
+def pickle_format(info):
+    msg = pickle.dumps(info)
+    return bytes(f'{len(msg):<{HEADERSIZE}}', FORMAT) + msg
+
+def mkdir_p(mypath):
+    '''Creates a directory. equivalent to using mkdir -p on the command line'''
+
+    from errno import EEXIST
+    from os import makedirs,path
+
+    try:
+        makedirs(mypath)
+    except OSError as exc: # Python >2.5
+        if exc.errno == EEXIST and path.isdir(mypath):
+            pass
+        else: raise
+
 if __name__ == '__main__':
+    info = {
+        'mode':'',
+        'name':'',
+        'alg':'',
+        'signal':'',
+        'image_option':''
+    }
     name = input('Informe seu nome\n-> ')
+    base_dir = f'Client/Images/{name}'
     while True:
         option = printMainMenu()
 
@@ -68,14 +103,17 @@ if __name__ == '__main__':
             client = st.socket(st.AF_INET, st.SOCK_STREAM)
             client.connect(ADDR)
 
-            algorithm = input('\nInforme o algoritmo: CGNE (1) ou CGNR (2)\n-> ')
+            algorithm = int(input('\nInforme o algoritmo: CGNE (1) ou CGNR (2)\n-> '))
             filename = input('\nInforme o nome do arquivo de sinal\n-> ')
 
             g = calculate_signal(filename)
 
-            info = {1: name, 2: algorithm, 3: g}
-            msg = pickle.dumps(info)
-            msg = bytes(f'{len(msg):<{HEADERSIZE}}', FORMAT) + msg
+            info['name'] = name
+            info['mode'] = 'process'
+            info['alg'] = alg[algorithm]
+            info['signal'] = g
+
+            msg = pickle_format(info)
 
             client.send(msg)
             input('\nSinal enviado. Clique ENTER para continuar...')
@@ -86,68 +124,64 @@ if __name__ == '__main__':
             client = st.socket(st.AF_INET, st.SOCK_STREAM)
             client.connect(ADDR)
 
-            tp = input('\nInforme se irá ser recebido uma(1) ou todas as imagens (2)\n-> ')
+            tp = input('\nInforme se irá ser recebido uma (U) ou todas as imagens (A)\n-> ')
 
-            info = {1: name, 2: tp}
-            msg = pickle.dumps(info)
-            msg = bytes(f'{len(msg):<{HEADERSIZE}}', FORMAT) + msg
+            info['name'] = name
+            info['mode'] = 'send_image'
+            info['image_option'] = tp
+
+            msg = pickle_format(info)
 
             client.send(msg)
 
-            data = b''
-            while True:
-                msg = client.recv(1024)
-                if not msg: break
-                data += msg
+            data = receive_message(client)
 
-            info = pickle.loads(data[HEADERSIZE:])
+            data = pickle.loads(data[HEADERSIZE:])
             
             client.close()
-            if tp == '1':                
-                client = st.socket(st.AF_INET, st.SOCK_STREAM)
-                client.connect(ADDR)
+            if len(data) > 0:
+                if tp == 'U':                
+                    client = st.socket(st.AF_INET, st.SOCK_STREAM)
+                    client.connect(ADDR)
 
-                itr = 1
-                for image in info:
-                    print(f'{itr} - {image}')
-                    itr = itr + 1
+                    img_dict = {}
 
-                image_option = int(input('\nEscolha uma imagem\n-> '))
+                    itr = 1
+                    for n, image in data.items():
+                        img_dict[itr] = image
+                        print(f'{itr} - {image}')
+                        itr +=  1
 
-                info = {1: name, 2: image_option}
-                msg = pickle.dumps(info)
-                msg = bytes(f'{len(msg):<{HEADERSIZE}}', FORMAT) + msg
+                    image_option = int(input('\nEscolha uma imagem\n-> '))
 
-                client.send(msg)
+                    if image_option in img_dict:
+                        info['image_option'] = img_dict[image_option]
+                        msg = pickle_format(info)
 
-                data = b''
-                while True:
-                    msg = client.recv(1024)
-                    if not msg: break
-                    data += msg
+                        client.send(msg)
 
-                info = pickle.loads(data[HEADERSIZE:])
+                        data = receive_message(client)
 
-                img = open(f'{image_option}.png', 'wb')
-                img.write(base64.b64decode((info)))
-                img.close()
+                        info = pickle.loads(data[HEADERSIZE:])
+                        mkdir_p(base_dir)
+                        for key in info.keys():
+                            img = open(f'{base_dir}/{key}', 'wb')
+                            img.write(base64.b64decode((info[key])))
+                            img.close()
+                        input('Imagem salva com sucesso. Pressione ENTER para continuar...')
+                    else:
+                        input('Nenhuma imagem selecionada. Pressione ENTER para continuar...')
+                elif tp == 'A':
+                    mkdir_p(base_dir)
+                    for key in data.keys():
+                        print(key)
+                        img = open(f'{base_dir}/{key}', 'wb')
+                        img.write(base64.b64decode((data[key])))
+                        img.close()
 
-                input('Imagem salva com sucesso. Clique ENTER para continuar...')
-
-                client.close()
-            
-            elif tp == '2':
-                itr = 1
-                for image in info:
-                    img = open(f'{itr}.png', 'wb')
-                    img.write(base64.b64decode((image)))
-                    img.close()
-                    itr = itr + 1
-                    
-                input('Imagens salvas com sucesso. Clique ENTER para continuar...')
-
+                    input('Imagem salva com sucesso. Pressione ENTER para continuar...')
             else:
-                print('ERROR')
+                input("No images available. Pressione ENTER para continuar...")
 
             client.close()
 

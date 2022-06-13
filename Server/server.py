@@ -9,13 +9,13 @@ import feather
 import matplotlib.pyplot as plt
 
 from matplotlib.ticker import MaxNLocator
-from enum import Enum
+
 from queue import Queue
 from time import time
 from datetime import datetime
 from PIL import Image
 
-PORT = 5053
+PORT = 5052
 SERVER = '127.0.0.1'
 ADDR = (SERVER, PORT)
 FORMAT = 'utf-8'
@@ -27,10 +27,6 @@ PROCESSING_QUEUE = Queue()
 server = st.socket(st.AF_INET, st.SOCK_STREAM)
 server.bind(ADDR)
 
-class Algorithm(Enum):
-    CGNE = 1
-    CGNR = 2
-
 def load_feather(path):
     # Loads feather file based on path
     filename = os.path.splitext(os.path.split(path)[1])[0]
@@ -40,6 +36,40 @@ def load_feather(path):
     end_time = time()
     print(f'    [LOADING] Finished, time spent: {end_time - start_time}.')
     return file
+
+def pickle_format(info):
+    msg = pickle.dumps(info)
+    return bytes(f'{len(msg):<{HEADERSIZE}}', FORMAT) + msg
+
+def handle_info(info, conn):
+    if info['mode'] == 'process':
+        print(f'    [PROCESSING] File added into the queue.')
+        PROCESSING_QUEUE.put(info)
+    elif info['mode'] == 'send_image':
+        images = {}
+        image_path = BASE_PATH + f'/Images/{info["name"]}'
+        if info['image_option'] == 'U':
+            if os.path.isdir(image_path):
+                for image in os.listdir(image_path):
+                    images[image] = image
+            else:
+                print('[CONNECTION] No image found')
+        elif info['image_option'] == 'A':
+            for image in os.listdir(image_path):
+                with open(f'{image_path}/{image}', "rb") as file:
+                    images[image] = base64.b64encode(file.read())
+        else:
+            # Send specific image
+            if os.path.exists(f'{image_path}/{info["image_option"]}'):
+                with open(f'{image_path}/{info["image_option"]}', "rb") as file:
+                    images[os.path.basename(file.name)] = base64.b64encode(file.read())
+            else:
+                print('[CONNECTION] Received wrong image name')
+
+        p = pickle_format(images)
+        conn.send(p)
+
+    
 
 def handle_client(conn, addr):
     print(f"[CONNECTION] IP: {addr[0]}, Port: {addr[1]} connected.")
@@ -61,42 +91,7 @@ def handle_client(conn, addr):
                 info = pickle.loads(full_msg[HEADERSIZE:])
                 new_msg = True
                 full_msg = b''
-                if len(info) == 3:
-                    print(f'    [PROCESSING] File added into the queue.')
-                    PROCESSING_QUEUE.put(info)
-                else:
-                    images = []
-                    if(isinstance(info[2], int)):
-                        itr = 1
-                        #Deve ter um jeito melhor de fazer isso, tipo pegar o indice da imagem direto em vez de percorrer todas as imagens
-                        for image in os.listdir(BASE_PATH + f'/Images/{info[1]}'):
-                            if(itr == info[2]):
-                                with open(BASE_PATH + f'/Images/{info[1]}/{image}', "rb") as file:
-                                    img = base64.b64encode(file.read())
-                                p = pickle.dumps(img)
-                                p = bytes(f'{len(p):<{HEADERSIZE}}', FORMAT) + p
-                                conn.send(p)
-                                break
-                            itr = itr + 1
-                    else:
-                        if info[2] == '1':
-                            for image in os.listdir(BASE_PATH + f'/Images/{info[1]}'):
-                                images.append(image)
-                            p = pickle.dumps(images)
-                            p = bytes(f'{len(p):<{HEADERSIZE}}', FORMAT) + p
-                            conn.send(p)
-
-                        elif info[2] == '2':
-                            for image in os.listdir(BASE_PATH + f'/Images/{info[1]}'):
-                                with open(BASE_PATH + f'/Images/{info[1]}/{image}', "rb") as file:
-                                    img = base64.b64encode(file.read())
-                                images.append(img)
-                            p = pickle.dumps(images)
-                            p = bytes(f'{len(p):<{HEADERSIZE}}', FORMAT) + p
-                            conn.send(p)
-                        else:
-                            print('Invalid option')
-
+                handle_info(info, conn)
                 connected = False
     conn.close()
     print(f"[CONNECTION] IP: {addr[0]}, Port: {addr[1]} disconnected.")
@@ -173,7 +168,7 @@ def mkdir_p(mypath):
 def process_image(info):
     process_start = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')
     image_size = 0
-    if len(info[3]) > 50000:
+    if len(info['signal']) > 50000:
         image_size = 60
         model_path = BASE_PATH + '/Models/H-1.feather'
     else:
@@ -182,16 +177,9 @@ def process_image(info):
 
     H = load_feather(model_path)
 
-    alg = Algorithm(int(info[2])).name 
-
     # Process 
     start_time = time()
-    if alg == 'CGNE':
-        f = cgne(H, info[3], image_size)
-    elif alg == 'CGNR':
-        f = cgnr(H, info[3], image_size)
-    else:
-        print('Error')
+    f = globals()[info['alg']](H, info['signal'], image_size)
     end_time = time()
     print(f'    [PROCESSING] Time spent: {end_time - start_time}')
 
@@ -199,17 +187,17 @@ def process_image(info):
 
     process_end = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')
 
-    name_dir = f'{BASE_PATH}/Images/{info[1]}'
+    name_dir = f'{BASE_PATH}/Images/{info["name"]}'
     mkdir_p(name_dir)
 
     metadata = {
-        'Title':f'{info[1]}',
+        'Title':f'{info["name"]}',
         'Author':'Lucas Venâncio e Diego Okawa',
-        'Description': f'Algorithm used: {alg} | Image size: {image_size}px | Start date: {process_start} | End date: {process_end} | Time spent: {round(end_time - start_time, 2)}s',
+        'Description': f'Algorithm used: {info["alg"]} | Image size: {image_size}px | Start date: {process_start} | End date: {process_end} | Time spent: {round(end_time - start_time, 2)}s',
     }
-    # plt.imshow(f, 'gray')
-    # plt.savefig(f'{name_dir}/{info[1]}-{process_end}.png', metadata=metadata)
-    plt.imsave(f'{name_dir}/{info[1]}-{process_end}.png', f, metadata=metadata, cmap='gray')
+    plt.imshow(f, 'gray')
+    plt.savefig(f'{name_dir}/{info["name"]}-{process_end}.png', metadata=metadata)
+    # plt.imsave(f'{name_dir}/{info["name"]}-{process_end}.png', f, metadata=metadata, cmap='gray')
     print(f'    [PROCESSING] Image saved')
 
 def start_server():
