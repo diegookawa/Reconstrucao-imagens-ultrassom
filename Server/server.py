@@ -7,6 +7,10 @@ import pickle
 import base64
 import feather
 import matplotlib.pyplot as plt
+import resource
+import platform
+import sys
+import gc
 
 from matplotlib.ticker import MaxNLocator
 
@@ -24,8 +28,45 @@ HEADERSIZE = 10
 BASE_PATH = 'Server'
 PROCESSING_QUEUE = Queue()
 
+erro = 1e-4
+
+MODELS = {
+    60:'H-1',
+    30:'H-2'
+}
+
 server = st.socket(st.AF_INET, st.SOCK_STREAM)
 server.bind(ADDR)
+
+def memory_limit(percentage: float):
+    if platform.system() != "Linux":
+        print('Only works on linux!')
+        return
+    soft, hard = resource.getrlimit(resource.RLIMIT_AS)
+    resource.setrlimit(resource.RLIMIT_AS, (get_memory() * 1024 * percentage, hard))
+
+def get_memory():
+    with open('/proc/meminfo', 'r') as mem:
+        free_memory = 0
+        for i in mem:
+            sline = i.split()
+            if str(sline[0]) in ('MemFree:', 'Buffers:', 'Cached:'):
+                free_memory += int(sline[1])
+    return free_memory
+
+def memory(percentage=0.8):
+    def decorator(function):
+        def wrapper(*args, **kwargs):
+            memory_limit(percentage)
+            try:
+                return function(*args, **kwargs)
+            except MemoryError:
+                mem = get_memory() / 1024 /1024
+                print('Remain: %.2f GB' % mem)
+                sys.stderr.write('\n\nERROR: Memory Exception\n')
+                sys.exit(1)
+        return wrapper
+    return decorator
 
 def load_feather(path):
     # Loads feather file based on path
@@ -69,8 +110,6 @@ def handle_info(info, conn):
         p = pickle_format(images)
         conn.send(p)
 
-    
-
 def handle_client(conn, addr):
     print(f"[CONNECTION] IP: {addr[0]}, Port: {addr[1]} connected.")
 
@@ -103,7 +142,6 @@ def cgne(H, g, image):
     f_i = np.zeros((image ** 2, 1))
     r_i = g - np.dot(H, f_i)
     p_i = np.dot(np.transpose(H), r_i)
-    erro = 1e-4
 
     for i in range(0, len(g)):
         # i variables        
@@ -122,14 +160,13 @@ def cgne(H, g, image):
             break
 
         p_i = np.dot(np.transpose(H), r_i) + beta * p_i
-    return f_i
+    return f_i, i
 
 def cgnr(H, g, image):
     f_i = np.zeros((image ** 2, 1))
     r_i = g - np.dot(H, f_i)
     z_i = np.dot(np.transpose(H), r_i)
     p_i = z_i
-    erro = 1e-4
 
     for i in range(0, len(g)):
         w_i = np.dot(H, p_i)
@@ -150,7 +187,7 @@ def cgnr(H, g, image):
             break
 
         p_i = z_i + beta * p_i
-    return f_i
+    return f_i, i
 
 def mkdir_p(mypath):
     '''Creates a directory. equivalent to using mkdir -p on the command line'''
@@ -167,13 +204,8 @@ def mkdir_p(mypath):
 
 def process_image(info):
     process_start = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')
-    image_size = 0
-    if len(info['signal']) > 50000:
-        image_size = 60
-        model_path = BASE_PATH + '/Models/H-1.feather'
-    else:
-        image_size = 30
-        model_path = BASE_PATH + '/Models/H-2.feather'
+    image_size = info['size']
+    model_path = f'{BASE_PATH}/Models/{MODELS[info["size"]]}.feather'
 
     H = load_feather(model_path)
 
@@ -200,6 +232,11 @@ def process_image(info):
     # plt.imsave(f'{name_dir}/{info["name"]}-{process_end}.png', f, metadata=metadata, cmap='gray')
     print(f'    [PROCESSING] Image saved')
 
+    # Clear memory
+    del H
+    del f
+    gc.collect()
+
 def start_server():
     server.listen(5)
 
@@ -217,10 +254,15 @@ def process_queue():
             print(f'    [PROCESSING] Signal found in queue')
             process_image(PROCESSING_QUEUE.get())
 
-if __name__ == '__main__':
+@memory(percentage=0.8)
+def main():
     print('[PROCESSING] Processing queue initiated.')
     queue_thread = threading.Thread(target=process_queue, name='Processing Thread')
     queue_thread.start()
 
     print("[STARTING] Server is starting...")
     start_server()
+
+
+if __name__ == '__main__':
+    main()

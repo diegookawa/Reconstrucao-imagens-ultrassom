@@ -4,10 +4,6 @@ import pandas as pd
 from time import time
 from enum import IntEnum
 
-class Algorithm(IntEnum):
-    cgne = 1
-    cgnr = 2
-
 def convert_feather(path):
     start_time = time()
     df = pd.read_csv(f'{path}.csv', header=None)
@@ -18,5 +14,4 @@ def convert_feather(path):
     return end_time - start_time
 
 if "__main__"  == __name__:
-    # convert_feather('Servidor/Models/H-2')
-    print(Algorithm.value)
+    convert_feather('Server/Models/H-2')

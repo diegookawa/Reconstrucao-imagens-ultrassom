@@ -1,5 +1,6 @@
 import socket as st
 import pandas as pd
+import numpy as np
 import pickle
 import base64
 import os
@@ -17,9 +18,8 @@ DISCONNECT_MESSAGE = "!DISCONNECT"
 
 alg = ['', 'cgne', 'cgnr']
 
-def calculate_signal(filename):
-    convert_feather(f'{filename}')
-    g = load_feather(f'{filename}.feather')
+def calculate_signal(g):
+    
     n = 64
 
     s = 794 if len(g) > 50000 else 436
@@ -35,6 +35,7 @@ def convert_feather(path):
     start_time = time()
     df = pd.read_csv(f'{path}.csv', header=None)
     df.columns = df.columns.astype(str)
+    df = df.replace(np.inf, np.nan).replace(-np.inf, np.nan).dropna()
     df.to_feather(f'{path}.feather')
     print(f'\nSize of feather: {len(df)}')
     end_time = time()
@@ -104,14 +105,21 @@ if __name__ == '__main__':
             client.connect(ADDR)
 
             algorithm = int(input('\nInforme o algoritmo: CGNE (1) ou CGNR (2)\n-> '))
+            size = int(input('\nInforme o tamanho do sinal\n-> '))
             filename = input('\nInforme o nome do arquivo de sinal\n-> ')
+            signal_gain = int(input('\nDeseja executar o ganho de sinal? 1 para Sim, 0 para Não\n-> '))
 
-            g = calculate_signal(filename)
+            convert_feather(f'{filename}')
+            g = load_feather(f'{filename}.feather')
+
+            if signal_gain:
+                g = calculate_signal(g)                
 
             info['name'] = name
             info['mode'] = 'process'
             info['alg'] = alg[algorithm]
             info['signal'] = g
+            info['size'] = size
 
             msg = pickle_format(info)
 
