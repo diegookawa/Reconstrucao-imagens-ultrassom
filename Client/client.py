@@ -10,7 +10,7 @@ from time import time
 from math import sqrt
 
 SERVER = '127.0.0.1'
-PORT = 5052
+PORT = 5053
 ADDR = (SERVER, PORT)
 FORMAT = "utf-8"
 HEADERSIZE = 10

@@ -1,4 +1,4 @@
-import os
+import os, psutil
 import socket as st
 import threading
 import numpy as np
@@ -19,7 +19,7 @@ from time import time
 from datetime import datetime
 from PIL import Image
 
-PORT = 5052
+PORT = 5053
 SERVER = '127.0.0.1'
 ADDR = (SERVER, PORT)
 FORMAT = 'utf-8'
@@ -37,36 +37,6 @@ MODELS = {
 
 server = st.socket(st.AF_INET, st.SOCK_STREAM)
 server.bind(ADDR)
-
-def memory_limit(percentage: float):
-    if platform.system() != "Linux":
-        print('Only works on linux!')
-        return
-    soft, hard = resource.getrlimit(resource.RLIMIT_AS)
-    resource.setrlimit(resource.RLIMIT_AS, (get_memory() * 1024 * percentage, hard))
-
-def get_memory():
-    with open('/proc/meminfo', 'r') as mem:
-        free_memory = 0
-        for i in mem:
-            sline = i.split()
-            if str(sline[0]) in ('MemFree:', 'Buffers:', 'Cached:'):
-                free_memory += int(sline[1])
-    return free_memory
-
-def memory(percentage=0.8):
-    def decorator(function):
-        def wrapper(*args, **kwargs):
-            memory_limit(percentage)
-            try:
-                return function(*args, **kwargs)
-            except MemoryError:
-                mem = get_memory() / 1024 /1024
-                print('Remain: %.2f GB' % mem)
-                sys.stderr.write('\n\nERROR: Memory Exception\n')
-                sys.exit(1)
-        return wrapper
-    return decorator
 
 def load_feather(path):
     # Loads feather file based on path
@@ -156,7 +126,6 @@ def cgne(H, g, image):
         erro_i = abs(np.linalg.norm(r_i, ord=2) - np.linalg.norm(r_d, ord=2))
         
         if erro_i < erro:
-            print(f'    [PROCESSING] Image processed {i + 1} times.')
             break
 
         p_i = np.dot(np.transpose(H), r_i) + beta * p_i
@@ -183,7 +152,6 @@ def cgnr(H, g, image):
         erro_i = abs(np.linalg.norm(r_i, ord=2) - np.linalg.norm(r_d, ord=2))
 
         if erro_i < erro:
-            print(f'    [PROCESSING] Image processed {i + 1} times.')
             break
 
         p_i = z_i + beta * p_i
@@ -211,8 +179,9 @@ def process_image(info):
 
     # Process 
     start_time = time()
-    f = globals()[info['alg']](H, info['signal'], image_size)
+    f, i = globals()[info['alg']](H, info['signal'], image_size)
     end_time = time()
+    print(f'    [PROCESSING] Image processed {i + 1} times.')
     print(f'    [PROCESSING] Time spent: {end_time - start_time}')
 
     f = np.reshape(f, (image_size, image_size), order='F')
@@ -225,7 +194,7 @@ def process_image(info):
     metadata = {
         'Title':f'{info["name"]}',
         'Author':'Lucas Venâncio e Diego Okawa',
-        'Description': f'Algorithm used: {info["alg"]} | Image size: {image_size}px | Start date: {process_start} | End date: {process_end} | Time spent: {round(end_time - start_time, 2)}s',
+        'Description': f'Algorithm used: {info["alg"]} | Image size: {image_size}px | Start date: {process_start} | End date: {process_end} | Time spent: {round(end_time - start_time, 2)}s | Iterations: {i}',
     }
     plt.imshow(f, 'gray')
     plt.savefig(f'{name_dir}/{info["name"]}-{process_end}.png', metadata=metadata)
@@ -250,11 +219,13 @@ def start_server():
 
 def process_queue():
     while True:
-        if PROCESSING_QUEUE.qsize() > 0:
+        mem = psutil.virtual_memory()
+        free_mem = (mem.available / mem.total) * 100
+        if PROCESSING_QUEUE.qsize() > 0 and free_mem > 50:
+            print(f'    [PROCESSING] Current memory usage: {round(100 - free_mem, 2)}%')
             print(f'    [PROCESSING] Signal found in queue')
             process_image(PROCESSING_QUEUE.get())
 
-@memory(percentage=0.8)
 def main():
     print('[PROCESSING] Processing queue initiated.')
     queue_thread = threading.Thread(target=process_queue, name='Processing Thread')
